@@ -190,15 +190,6 @@ unsigned long getMonitorContrast (HANDLE hMonitor)
 
 int main (int argc, char** argv)
 {
-    /*cxxopts::Options options{argv[0], "ddccli"};
-    
-    options.add_options()
-        ("b,brightness", "Set brightness", cxxopts::value<unsigned long>())
-        ("c,contrast", "Set contrast", cxxopts::value<unsigned long>())
-        ("l,list", "List monitors")
-        ("m,monitor", "Specify a monitor name to perform an operation on", cxxopts::value<std::string>())
-        ("h,help", "Print help");*/
-
     argagg::parser parser {{
         {
             "brightness", { "-b", "--brightness" }
