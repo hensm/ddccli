@@ -17,3 +17,12 @@ Utility for setting brightness/contrast on connected monitors via DDC/CI.
     -m, --monitor
         Selects a monitor to adjust. If not specified, actions affects all monitors.
 ````
+
+# Building
+
+## Requirements
+
+* Visual Studio 2015/17
+* ...or Visual C++ Build Tools
+
+Run make.bat. `cl` needs to be in the path or must be executed using VS command prompt.
