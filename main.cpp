@@ -236,7 +236,7 @@ int main (int argc, char** argv)
         if (args["version"]) {
             argagg::fmt_ostream fmt(std::cout);
 
-            fmt << "ddccli v0.0.1" << std::endl
+            fmt << "ddccli v0.0.2" << std::endl
                 << "Copyright (c) 2018 Matt Hensman <m@matt.tf>" << std::endl
                 << "MIT License" << std::endl;
 
