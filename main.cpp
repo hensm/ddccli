@@ -192,14 +192,23 @@ int main (int argc, char** argv)
 {
     argagg::parser parser {{
         {
-            "brightness", { "-b", "--brightness" }
+            "setBrightness", { "-b", "--brightness" }
           , "Sets monitor brightness", 1 }
       , {
-            "contrast", { "-c", "--contrast" }
+            "getBrightness", { "-B", "--get-brightness" }
+          , "Gets monitor brightness", 0 }
+      , {
+            "setContrast", { "-c", "--contrast" }
           , "Sets monitor contrast", 1 }
+      , {
+            "getContrast", { "-C", "--get-contrast" }
+          , "Gets monitor contrast", 0 }
       , {
             "help", { "-h", "--help" }
           , "Prints this help message", 0 }
+      , {
+            "version", { "-v", "--version" }
+          , "Prints the version number", 0 }
       , {
             "list", { "-l", "--list" }
           , "Lists connected monitors", 0 }
@@ -220,6 +229,16 @@ int main (int argc, char** argv)
                 << "Utility for setting brightness/contrast on connected monitors via DDC/CI." << std::endl
                 << std::endl
                 << parser;
+
+            return EXIT_SUCCESS;
+        }
+
+        if (args["version"]) {
+            argagg::fmt_ostream fmt(std::cout);
+
+            fmt << "ddccli v0.0.1" << std::endl
+                << "Copyright (c) 2018 Matt Hensman <m@matt.tf>" << std::endl
+                << "MIT License" << std::endl;
 
             return EXIT_SUCCESS;
         }
@@ -250,18 +269,47 @@ int main (int argc, char** argv)
             }
         }
 
-        if (args["brightness"]) {
-            unsigned long level = args["brightness"];
+        if (args["setBrightness"]) {
+            unsigned long level = args["setBrightness"];
             for (auto const& monitor : monitorMap) {
                 setMonitorBrightness(monitor.second, level);
             }
         }
 
-        if (args["contrast"]) {
-            unsigned long level = args["contrast"];
+        if (args["getBrightness"]) {
+            if (args["monitor"]) {
+                auto it = monitorMap.find(args["monitor"]);
+                if (it == monitorMap.end()) {
+                    throw std::runtime_error("monitor not found");
+                }
+
+                std::cout << getMonitorBrightness(it->second) << std::endl;
+            } else {
+                throw std::runtime_error(
+                        "no monitor specified to query brightness");
+            }
+        }
+
+        if (args["setContrast"]) {
+            unsigned long level = args["setContrast"];
             for (auto const& monitor : monitorMap) {
                 setMonitorContrast(monitor.second, level);
             }
+        }
+
+        if (args["getContrast"]) {
+            if (args["monitor"]) {
+                auto it = monitorMap.find(args["monitor"]);
+                if (it == monitorMap.end()) {
+                    throw std::runtime_error("monitor not found");
+                }
+
+                std::cout << getMonitorContrast(it->second) << std::endl;
+            } else {
+                throw std::runtime_error(
+                        "no monitor specified to query contrast");
+            }
+
         }
 
     } catch (const std::runtime_error e) {
