@@ -1,4 +1,4 @@
-#ddccli
+# ddccli
 
 Windows CLI utility for setting brightness/contrast on connected monitors.
 
