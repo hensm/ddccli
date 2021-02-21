@@ -22,14 +22,6 @@ SOFTWARE.
 
 */
 
-
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-
-#pragma comment(lib, "User32.lib")
-#pragma comment(lib, "Dxva2.lib")
-
 #include "HighLevelMonitorConfigurationAPI.h"
 #include "PhysicalMonitorEnumerationAPI.h"
 #include "windows.h"
@@ -52,64 +44,130 @@ logError(const char* message)
 }
 
 
-BOOL CALLBACK
-monitorEnumProc(HMONITOR hMonitor,
-                HDC hdcMonitor,
-                LPRECT lprcMonitor,
-                LPARAM dwData)
+std::map<std::string, HANDLE> handles;
+
+void
+populateHandlesMap()
 {
-    MONITORINFOEX info;
-    info.cbSize = sizeof(MONITORINFOEX);
-    GetMonitorInfo(hMonitor, &info);
-
-    DWORD numPhysicalMonitors;
-    LPPHYSICAL_MONITOR physicalMonitors = NULL;
-
-    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor,
-                                                 &numPhysicalMonitors)) {
-        logError("failed to get number of physical monitors");
-        return FALSE;
+    // Cleanup
+    if (!handles.empty()) {
+        for (auto const& handle : handles) {
+            DestroyPhysicalMonitor(handle.second);
+        }
+        handles.clear();
     }
 
-    physicalMonitors = new PHYSICAL_MONITOR[numPhysicalMonitors];
 
-    if (physicalMonitors != NULL) {
-        if (!GetPhysicalMonitorsFromHMONITOR(
-              hMonitor, numPhysicalMonitors, physicalMonitors)) {
-            logError("failed to get physical monitors");
-            return FALSE;
-        }
+    struct Monitor {
+        HMONITOR handle;
+        std::vector<HANDLE> physicalHandles;
+    };
 
-        std::map<std::string, HANDLE>* monitorMap =
-          reinterpret_cast<std::map<std::string, HANDLE>*>(dwData);
-
-        monitorMap->insert(
-          { static_cast<std::string>(info.szDevice) // Monitor name
-            ,
-            physicalMonitors[0].hPhysicalMonitor }); // Monitor handle
-
-        /*if (!DestroyPhysicalMonitors(numPhysicalMonitors
-              , physicalMonitors)) {
-            std::cerr << "Failed to close monitor handles" << std::endl;
-            return FALSE;
-        }
-
-        free(physicalMonitors);*/
+    auto monitorEnumProc = [](HMONITOR hMonitor,
+                              HDC hdcMonitor,
+                              LPRECT lprcMonitor,
+                              LPARAM dwData) -> BOOL {
+        auto monitors = reinterpret_cast<std::vector<struct Monitor>*>(dwData);
+        monitors->push_back({ hMonitor, {} });
         return TRUE;
+    };
+
+    std::vector<struct Monitor> monitors;
+    EnumDisplayMonitors(
+      NULL, NULL, monitorEnumProc, reinterpret_cast<LPARAM>(&monitors));
+
+    // Get physical monitor handles
+    for (auto& monitor : monitors) {
+        DWORD numPhysicalMonitors;
+        LPPHYSICAL_MONITOR physicalMonitors = NULL;
+        if (!GetNumberOfPhysicalMonitorsFromHMONITOR(monitor.handle,
+                                                     &numPhysicalMonitors)) {
+            throw std::runtime_error("Failed to get physical monitor count.");
+            exit(EXIT_FAILURE);
+        }
+
+        physicalMonitors = new PHYSICAL_MONITOR[numPhysicalMonitors];
+        if (physicalMonitors == NULL) {
+            throw std::runtime_error(
+              "Failed to allocate physical monitor array");
+        }
+
+        if (!GetPhysicalMonitorsFromHMONITOR(
+              monitor.handle, numPhysicalMonitors, physicalMonitors)) {
+            throw std::runtime_error("Failed to get physical monitors.");
+        }
+
+        for (DWORD i = 0; i <= numPhysicalMonitors; i++) {
+            monitor.physicalHandles.push_back(
+              physicalMonitors[(numPhysicalMonitors == 1 ? 0 : i)]
+                .hPhysicalMonitor);
+        }
+
+        delete[] physicalMonitors;
     }
 
-    return FALSE;
+
+    DISPLAY_DEVICE adapterDev;
+    adapterDev.cb = sizeof(DISPLAY_DEVICE);
+
+    // Loop through adapters
+    int adapterDevIndex = 0;
+    while (EnumDisplayDevices(NULL, adapterDevIndex++, &adapterDev, 0)) {
+        DISPLAY_DEVICE displayDev;
+        displayDev.cb = sizeof(DISPLAY_DEVICE);
+
+        // Loop through displays (with device ID) on each adapter
+        int displayDevIndex = 0;
+        while (EnumDisplayDevices(adapterDev.DeviceName,
+                                  displayDevIndex++,
+                                  &displayDev,
+                                  EDD_GET_DEVICE_INTERFACE_NAME)) {
+
+            // Check valid target
+            if (!(displayDev.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP)
+                || displayDev.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) {
+                continue;
+            }
+
+            for (auto const& monitor : monitors) {
+                MONITORINFOEX monitorInfo;
+                monitorInfo.cbSize = sizeof(MONITORINFOEX);
+                GetMonitorInfo(monitor.handle, &monitorInfo);
+
+                for (size_t i = 0; i < monitor.physicalHandles.size(); i++) {
+                    /**
+                     * Re-create DISPLAY_DEVICE.DeviceName with
+                     * MONITORINFOEX.szDevice and monitor index.
+                     */
+                    std::string monitorName =
+                      static_cast<std::string>(monitorInfo.szDevice)
+                      + "\\Monitor" + std::to_string(i);
+
+                    std::string deviceName =
+                      static_cast<std::string>(displayDev.DeviceName);
+
+                    // Match and store against device ID
+                    if (monitorName == deviceName) {
+                        handles.insert(
+                          { static_cast<std::string>(displayDev.DeviceID),
+                            monitor.physicalHandles[i] });
+
+                        break;
+                    }
+                }
+            }
+        }
+    }
 }
 
 
+
 struct MonitorBrightness {
-    unsigned long minimumBrightness;
     unsigned long maximumBrightness;
     unsigned long currentBrightness;
 };
 
 struct MonitorContrast {
-    unsigned long minimumContrast;
     unsigned long maximumContrast;
     unsigned long currentContrast;
 };
@@ -129,7 +187,6 @@ getMonitorBrightness(HANDLE hMonitor)
     }
 
     MonitorBrightness brightness = {
-        static_cast<unsigned long>(minimumBrightness),
         static_cast<unsigned long>(maximumBrightness),
         static_cast<unsigned long>(currentBrightness)
     };
@@ -149,8 +206,7 @@ getMonitorContrast(HANDLE hMonitor)
         throw std::runtime_error("failed to get monitor contrast");
     }
 
-    MonitorContrast contrast = { static_cast<unsigned long>(minimumContrast),
-                                 static_cast<unsigned long>(maximumContrast),
+    MonitorContrast contrast = { static_cast<unsigned long>(maximumContrast),
                                  static_cast<unsigned long>(currentContrast) };
 
     return contrast;
@@ -161,9 +217,7 @@ setMonitorBrightness(HANDLE hMonitor, unsigned long level)
 {
     auto brightness = getMonitorBrightness(hMonitor);
 
-    if (level < brightness.minimumBrightness) {
-        throw std::runtime_error("brightness level deceeds minimum");
-    } else if (level > brightness.maximumBrightness) {
+    if (level > brightness.maximumBrightness) {
         throw std::runtime_error("brightness level exceeds maximum");
     }
 
@@ -177,9 +231,7 @@ setMonitorContrast(HANDLE hMonitor, unsigned long level)
 {
     auto contrast = getMonitorContrast(hMonitor);
 
-    if (level < contrast.minimumContrast) {
-        throw std::runtime_error("contrast level deceeds minimum");
-    } else if (level > contrast.maximumContrast) {
+    if (level > contrast.maximumContrast) {
         throw std::runtime_error("contrast level exceeds maximum");
     }
 
@@ -249,22 +301,18 @@ main(int argc, char** argv)
         }
 
         try {
-            std::map<std::string, HANDLE> monitorMap;
-            EnumDisplayMonitors(NULL,
-                                NULL,
-                                &monitorEnumProc,
-                                reinterpret_cast<LPARAM>(&monitorMap));
+            populateHandlesMap();
 
             if (args["list"]) {
                 if (shouldOutputJson) {
                     jsonOutput["monitorList"] = json::array();
                 }
 
-                for (auto const& monitor : monitorMap) {
+                for (auto const& [ id, handle ] : handles) {
                     if (shouldOutputJson) {
-                        jsonOutput["monitorList"].push_back(monitor.first);
+                        jsonOutput["monitorList"].push_back(id);
                     } else {
-                        std::cout << monitor.first << std::endl;
+                        std::cout << id << std::endl;
                     }
                 }
             }
@@ -274,28 +322,28 @@ main(int argc, char** argv)
                 std::string selectedMonitorName = args["monitor"];
 
                 // Remove all non-matching monitors from the map
-                for (auto const& monitor : monitorMap) {
-                    if (monitor.first != selectedMonitorName) {
-                        monitorMap.erase(monitor.first);
+                for (auto const& [ id, handle ] : handles) {
+                    if (id != selectedMonitorName) {
+                        handles.erase(id);
                     }
                 }
 
-                if (monitorMap.empty()) {
+                if (handles.empty()) {
                     throw std::runtime_error("monitor doesn't exist");
                 }
             }
 
             if (args["setBrightness"]) {
                 unsigned long level = args["setBrightness"];
-                for (auto const& monitor : monitorMap) {
-                    setMonitorBrightness(monitor.second, level);
+                for (auto const& [ id, handle ] : handles) {
+                    setMonitorBrightness(handle, level);
                 }
             }
 
             if (args["getBrightness"]) {
                 if (args["monitor"]) {
-                    auto it = monitorMap.find(args["monitor"]);
-                    if (it == monitorMap.end()) {
+                    auto it = handles.find(args["monitor"]);
+                    if (it == handles.end()) {
                         throw std::runtime_error("monitor not found");
                     }
 
@@ -315,15 +363,15 @@ main(int argc, char** argv)
 
             if (args["setContrast"]) {
                 unsigned long level = args["setContrast"];
-                for (auto const& monitor : monitorMap) {
-                    setMonitorContrast(monitor.second, level);
+                for (auto const& [ id, handle ] : handles) {
+                    setMonitorContrast(handle, level);
                 }
             }
 
             if (args["getContrast"]) {
                 if (args["monitor"]) {
-                    auto it = monitorMap.find(args["monitor"]);
-                    if (it == monitorMap.end()) {
+                    auto it = handles.find(args["monitor"]);
+                    if (it == handles.end()) {
                         throw std::runtime_error("monitor not found");
                     }
 
