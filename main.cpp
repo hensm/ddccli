@@ -30,10 +30,10 @@ SOFTWARE.
 #pragma comment(lib, "User32.lib")
 #pragma comment(lib, "Dxva2.lib")
 
+#include "HighLevelMonitorConfigurationAPI.h"
+#include "PhysicalMonitorEnumerationAPI.h"
 #include "windows.h"
 #include "winuser.h"
-#include "PhysicalMonitorEnumerationAPI.h"
-#include "HighLevelMonitorConfigurationAPI.h"
 
 #include <iostream>
 #include <map>
@@ -45,17 +45,18 @@ SOFTWARE.
 using json = nlohmann::json;
 
 
-void logError (const char* message)
+void
+logError(const char* message)
 {
     std::cerr << "error: " << message << std::endl;
 }
 
 
-BOOL CALLBACK monitorEnumProc (
-        HMONITOR hMonitor
-      , HDC hdcMonitor
-      , LPRECT lprcMonitor
-      , LPARAM dwData)
+BOOL CALLBACK
+monitorEnumProc(HMONITOR hMonitor,
+                HDC hdcMonitor,
+                LPRECT lprcMonitor,
+                LPARAM dwData)
 {
     MONITORINFOEX info;
     info.cbSize = sizeof(MONITORINFOEX);
@@ -64,8 +65,8 @@ BOOL CALLBACK monitorEnumProc (
     DWORD numPhysicalMonitors;
     LPPHYSICAL_MONITOR physicalMonitors = NULL;
 
-    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor
-          , &numPhysicalMonitors)) {
+    if (!GetNumberOfPhysicalMonitorsFromHMONITOR(hMonitor,
+                                                 &numPhysicalMonitors)) {
         logError("failed to get number of physical monitors");
         return FALSE;
     }
@@ -73,18 +74,19 @@ BOOL CALLBACK monitorEnumProc (
     physicalMonitors = new PHYSICAL_MONITOR[numPhysicalMonitors];
 
     if (physicalMonitors != NULL) {
-        if (!GetPhysicalMonitorsFromHMONITOR(hMonitor
-              , numPhysicalMonitors, physicalMonitors)) {
+        if (!GetPhysicalMonitorsFromHMONITOR(
+              hMonitor, numPhysicalMonitors, physicalMonitors)) {
             logError("failed to get physical monitors");
             return FALSE;
         }
 
         std::map<std::string, HANDLE>* monitorMap =
-                reinterpret_cast<std::map<std::string, HANDLE>*>(dwData);
+          reinterpret_cast<std::map<std::string, HANDLE>*>(dwData);
 
         monitorMap->insert(
-              { static_cast<std::string>(info.szDevice)  // Monitor name
-              , physicalMonitors[0].hPhysicalMonitor }); // Monitor handle
+          { static_cast<std::string>(info.szDevice) // Monitor name
+            ,
+            physicalMonitors[0].hPhysicalMonitor }); // Monitor handle
 
         /*if (!DestroyPhysicalMonitors(numPhysicalMonitors
               , physicalMonitors)) {
@@ -100,71 +102,68 @@ BOOL CALLBACK monitorEnumProc (
 }
 
 
-struct MonitorBrightness
-{
+struct MonitorBrightness {
     unsigned long minimumBrightness;
     unsigned long maximumBrightness;
     unsigned long currentBrightness;
 };
 
-struct MonitorContrast
-{
+struct MonitorContrast {
     unsigned long minimumContrast;
     unsigned long maximumContrast;
     unsigned long currentContrast;
 };
 
-MonitorBrightness getMonitorBrightness (HANDLE hMonitor)
+MonitorBrightness
+getMonitorBrightness(HANDLE hMonitor)
 {
     DWORD minimumBrightness;
     DWORD maximumBrightness;
     DWORD currentBrightness;
 
-    if (!GetMonitorBrightness(hMonitor
-          , &minimumBrightness
-          , &currentBrightness
-          , &maximumBrightness)) {
+    if (!GetMonitorBrightness(hMonitor,
+                              &minimumBrightness,
+                              &currentBrightness,
+                              &maximumBrightness)) {
         throw std::runtime_error("failed to get monitor brightness");
     }
 
     MonitorBrightness brightness = {
-        static_cast<unsigned long>(minimumBrightness)
-      , static_cast<unsigned long>(maximumBrightness)
-      , static_cast<unsigned long>(currentBrightness)
+        static_cast<unsigned long>(minimumBrightness),
+        static_cast<unsigned long>(maximumBrightness),
+        static_cast<unsigned long>(currentBrightness)
     };
 
     return brightness;
 }
 
-MonitorContrast getMonitorContrast (HANDLE hMonitor)
+MonitorContrast
+getMonitorContrast(HANDLE hMonitor)
 {
     DWORD minimumContrast;
     DWORD maximumContrast;
     DWORD currentContrast;
 
-    if (!GetMonitorContrast(hMonitor
-          , &minimumContrast
-          , &currentContrast
-          , &maximumContrast)) {
+    if (!GetMonitorContrast(
+          hMonitor, &minimumContrast, &currentContrast, &maximumContrast)) {
         throw std::runtime_error("failed to get monitor contrast");
     }
 
-    MonitorContrast contrast = {
-        static_cast<unsigned long>(minimumContrast)
-      , static_cast<unsigned long>(maximumContrast)
-      , static_cast<unsigned long>(currentContrast)
-    };
+    MonitorContrast contrast = { static_cast<unsigned long>(minimumContrast),
+                                 static_cast<unsigned long>(maximumContrast),
+                                 static_cast<unsigned long>(currentContrast) };
 
     return contrast;
 }
 
-void setMonitorBrightness (HANDLE hMonitor, unsigned long level)
+void
+setMonitorBrightness(HANDLE hMonitor, unsigned long level)
 {
     auto brightness = getMonitorBrightness(hMonitor);
 
-    if (level < brightness.minimumBrightness){
+    if (level < brightness.minimumBrightness) {
         throw std::runtime_error("brightness level deceeds minimum");
-    } else if (level > brightness.maximumBrightness){
+    } else if (level > brightness.maximumBrightness) {
         throw std::runtime_error("brightness level exceeds maximum");
     }
 
@@ -173,13 +172,14 @@ void setMonitorBrightness (HANDLE hMonitor, unsigned long level)
     }
 }
 
-void setMonitorContrast (HANDLE hMonitor, unsigned long level)
+void
+setMonitorContrast(HANDLE hMonitor, unsigned long level)
 {
     auto contrast = getMonitorContrast(hMonitor);
 
-    if (level < contrast.minimumContrast){
+    if (level < contrast.minimumContrast) {
         throw std::runtime_error("contrast level deceeds minimum");
-    } else if (level > contrast.maximumContrast){
+    } else if (level > contrast.maximumContrast) {
         throw std::runtime_error("contrast level exceeds maximum");
     }
 
@@ -189,44 +189,38 @@ void setMonitorContrast (HANDLE hMonitor, unsigned long level)
 }
 
 
-int main (int argc, char** argv)
+int
+main(int argc, char** argv)
 {
-    argagg::parser parser {{
-        {
-            "setBrightness", { "-b", "--brightness" }
-          , "Sets monitor brightness", 1 }
-      , {
-            "getBrightness", { "-B", "--get-brightness" }
-          , "Gets monitor brightness", 0 }
-      , {
-            "setContrast", { "-c", "--contrast" }
-          , "Sets monitor contrast", 1 }
-      , {
-            "getContrast", { "-C", "--get-contrast" }
-          , "Gets monitor contrast", 0 }
-      , {
-            "help", { "-h", "--help" }
-          , "Prints this help message", 0 }
-      , {
-            "version", { "-v", "--version" }
-          , "Prints the version number", 0 }
-      , {
-            "list", { "-l", "--list" }
-          , "Lists connected monitors", 0 }
-      , {
-            "monitor", { "-m", "--monitor" }
-          , "Selects a monitor to adjust. If not specified, actions affects all monitors.", 1 }
-      , {
-            "json", {"-j", "--json"}
-          , "Outputs action results as JSON", 0}
-    }};
+    argagg::parser parser{
+        { { "setBrightness",
+            { "-b", "--brightness" },
+            "Sets monitor brightness",
+            1 },
+          { "getBrightness",
+            { "-B", "--get-brightness" },
+            "Gets monitor brightness",
+            0 },
+          { "setContrast", { "-c", "--contrast" }, "Sets monitor contrast", 1 },
+          { "getContrast",
+            { "-C", "--get-contrast" },
+            "Gets monitor contrast",
+            0 },
+          { "help", { "-h", "--help" }, "Prints this help message", 0 },
+          { "version", { "-v", "--version" }, "Prints the version number", 0 },
+          { "list", { "-l", "--list" }, "Lists connected monitors", 0 },
+          { "monitor",
+            { "-m", "--monitor" },
+            "Selects a monitor to adjust. If not specified, actions affects all monitors.",
+            1 },
+          { "json", { "-j", "--json" }, "Outputs action results as JSON", 0 } }
+    };
 
-    std::string versionString = "v0.0.2";
+    std::string versionString = "v0.1.0";
 
     std::ostringstream usage;
-    usage
-        << argv[0] << " " << versionString << std::endl
-        << "Usage: "<< argv[0] << " [options]" << std::endl;
+    usage << argv[0] << " " << versionString << std::endl
+          << "Usage: " << argv[0] << " [options]" << std::endl;
 
     try {
 
@@ -242,7 +236,7 @@ int main (int argc, char** argv)
             argagg::fmt_ostream fmt(std::cout);
 
             fmt << "ddccli " << versionString << std::endl
-                << "Copyright (c) 2018 Matt Hensman <m@matt.tf>" << std::endl
+                << "Copyright (c) 2021 Matt Hensman <m@matt.tf>" << std::endl
                 << "MIT License" << std::endl;
 
             return EXIT_SUCCESS;
@@ -256,8 +250,10 @@ int main (int argc, char** argv)
 
         try {
             std::map<std::string, HANDLE> monitorMap;
-            EnumDisplayMonitors(NULL, NULL, &monitorEnumProc
-                  , reinterpret_cast<LPARAM>(&monitorMap));
+            EnumDisplayMonitors(NULL,
+                                NULL,
+                                &monitorEnumProc,
+                                reinterpret_cast<LPARAM>(&monitorMap));
 
             if (args["list"]) {
                 if (shouldOutputJson) {
@@ -303,7 +299,8 @@ int main (int argc, char** argv)
                         throw std::runtime_error("monitor not found");
                     }
 
-                    auto brightness = getMonitorBrightness(it->second).currentBrightness;
+                    auto brightness =
+                      getMonitorBrightness(it->second).currentBrightness;
 
                     if (shouldOutputJson) {
                         jsonOutput["brightness"] = brightness;
@@ -312,7 +309,7 @@ int main (int argc, char** argv)
                     }
                 } else {
                     throw std::runtime_error(
-                            "no monitor specified to query brightness");
+                      "no monitor specified to query brightness");
                 }
             }
 
@@ -330,7 +327,8 @@ int main (int argc, char** argv)
                         throw std::runtime_error("monitor not found");
                     }
 
-                    auto contrast = getMonitorContrast(it->second).currentContrast;
+                    auto contrast =
+                      getMonitorContrast(it->second).currentContrast;
 
                     if (shouldOutputJson) {
                         jsonOutput["contrast"] = contrast;
@@ -339,9 +337,8 @@ int main (int argc, char** argv)
                     }
                 } else {
                     throw std::runtime_error(
-                            "no monitor specified to query contrast");
+                      "no monitor specified to query contrast");
                 }
-
             }
         } catch (const std::runtime_error e) {
             logError(e.what());
@@ -353,9 +350,8 @@ int main (int argc, char** argv)
         }
 
     } catch (const std::exception& e) {
-        std::cerr
-            << "Error parsing arguments: " << e.what() << std::endl
-            << usage.str() << parser;
+        std::cerr << "Error parsing arguments: " << e.what() << std::endl
+                  << usage.str() << parser;
         return EXIT_FAILURE;
     }
 

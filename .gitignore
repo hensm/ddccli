@@ -1,2 +1,4 @@
-ddccli.exe
-main.obj
+.vs/
+Debug/
+Release/
+*.vxcproj.user
