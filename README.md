@@ -28,7 +28,7 @@ Utility for setting brightness/contrast on connected monitors via DDC/CI.
 
 ## Requirements
 
-* Visual Studio 2015/17
+* Visual Studio 2019
 * ...or Visual C++ Build Tools
 
-Run make.bat. `cl` needs to be in the path or must be executed using VS command prompt.
+Open solution in VS and build from there or via the [command line](https://docs.microsoft.com/en-us/cpp/build/msbuild-visual-cpp?view=msvc-160).
